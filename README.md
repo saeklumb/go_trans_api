@@ -1,0 +1,60 @@
+# Go Transaction Service
+
+Микросервис для обработки финансовых транзакций между кошельками. В проекте реализована строгая консистентность данных (ACID), защита от двойного списания (идемпотентность) и асинхронная обработка событий.
+
+## Стек технологий
+
+- **Backend:** Go (`chi`)
+- **База данных:** PostgreSQL (`pgx`)
+- **Кэш/Идемпотентность:** Redis
+- **Брокер сообщений:** Kafka (`segmentio/kafka-go`)
+- **Инфраструктура:** Docker, Docker Compose
+
+## Ключевые архитектурные решения
+
+- **Транзакционность:** Переводы осуществляются через строгую SQL-транзакцию (`UPDATE -> UPDATE -> INSERT -> COMMIT`). Реализованы блокировки для предотвращения состояния гонки (race conditions).
+- **Идемпотентность:** Использование заголовка `Idempotency-Key` и атомарных операций Redis для защиты API от дублирующих запросов (например, при обрыве соединения на клиенте).
+- **Асинхронность:** Сразу после успешного перевода событие публикуется в Kafka. Отдельный consumer-worker асинхронно обрабатывает очередь (имитация отправки уведомлений), не блокируя ответ клиенту.
+- **Автомиграции:** Структура БД автоматически разворачивается при старте сервиса.
+
+## Быстрый запуск
+
+Запуск всей инфраструктуры (App, PostgreSQL, Redis, Kafka) одной командой:
+
+```bash
+docker-compose up -d --build
+API будет доступен по адресу http://localhost:8080.
+
+Проверка работоспособности сервиса:
+curl http://localhost:8080/health
+Примеры API запросов
+1. Перевод средств
+Bash
+curl -X POST http://localhost:8080/api/v1/transfers \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: unique-transaction-id-123" \
+  -d '{
+    "from_user_id": 1,
+    "to_user_id": 2,
+    "amount": 100,
+    "description": "Оплата услуг"
+  }'
+Повторный запрос с тем же Idempotency-Key вернет успешный ответ, но не приведет к повторному изменению балансов.
+
+2. Проверка баланса
+Bash
+curl http://localhost:8080/api/v1/wallets/1
+curl http://localhost:8080/api/v1/wallets/2
+Структура проекта
+cmd/app — точка входа в приложение
+
+internal/transport/http — HTTP-роутинг и хэндлеры
+
+internal/service — слой бизнес-логики
+
+internal/repository — слой работы с данными (Postgres, Redis)
+
+internal/kafka — Producer и Consumer
+
+internal/migrations — SQL-скрипты миграций
+```

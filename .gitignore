@@ -1,0 +1,11 @@
+# Go
+bin/
+*.exe
+*.test
+*.out
+
+# Local env / editor
+.env
+.vscode/
+.idea/
+
